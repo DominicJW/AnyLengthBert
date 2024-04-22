@@ -20,6 +20,8 @@ import random
 import math
 import string
 
+criterion = nn.BCEWithLogitsLoss() 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class CustomDataset(Dataset):
     def __init__(self, df, tokenizer_name='albert-base-v2', max_length=128):
