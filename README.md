@@ -9,8 +9,14 @@ this tutorial was used to advise hyper parameters https://medium.com/@behitek/fi
 
 To use the model 
 
-`from AnyLengthBertModelAndUtils import SentencePairClassifier, MaskedGlobalAvgPool1d, MaskedGlobalMaxPool1d`
-`from AnyLengthBertModelAndUtils import CustomDataset` For preproccessing text pairs, pass a dataframe of textpairs, with columns Claim, Evidence. if labels are supplied, they should be under column label. And if they are not supplied the argument `with_labels` must be set to false, in instantiation
+```
+from AnyLengthBertModelAndUtils import SentencePairClassifier, MaskedGlobalAvgPool1d, MaskedGlobalMaxPool1d
+```
+```
+from AnyLengthBertModelAndUtils import CustomDataset
+```
+
+For preproccessing text pairs, pass a dataframe of textpairs to CustomDataset, with columns Claim, Evidence. if labels are supplied, they should be under column label. And if they are not supplied the argument `with_labels` must be set to false, in instantiation
 
 Example, loading data
 ```
