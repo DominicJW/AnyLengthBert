@@ -50,10 +50,7 @@ class CustomDataset(Dataset):
         return self.preprocess_text(claim)
 
     def preprocess_evidence(self,evidence):
-        try:
-            evidence = evidence.replace("[REF]"," ")
-        except:
-            print(evidence)
+        evidence = evidence.replace("[REF]"," ")
         return self.preprocess_text(evidence)
 
     def preprocess_text(self,text):
