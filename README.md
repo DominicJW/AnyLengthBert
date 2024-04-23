@@ -36,6 +36,11 @@ net = SentencePairClassifier(bert_model='bert-base-uncased',freeze_bert=False)
 ```
 only SentencePairClassifier must be imported.  MaskedGlobalAvgPool1d, MaskedGlobalMaxPool1d do not need importing if instantiating a new model.
 
+
+How it works:
+
+text is tokenised, and broken into overlapping chunks. These chunks are then fed one by one to a bert layer, the pooler outputs (tanh + dense layer on cls token embedding ) are then aggregated by  average pooling and max  pooling across them, then the average and max pools are summed, and then normalised. This is to get the benefit of maxpool which can be good at highlighting prominent features, with the more holistic and smoother average pooling.
+
 AnyLengthBert.pt can be downloaded from https://www.dropbox.com/scl/fi/u1m76jo7ai2vd5kbk1kym/AnyLengthBert.pt?rlkey=qhdw3f5yqw8qzmfslbz795qqx&st=wixhnsh2&dl=1
 But it takes only 3 minutes to train on the training dataset, with an L4 GPU
 
