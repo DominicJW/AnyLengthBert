@@ -36,16 +36,12 @@ class CustomDataset(Dataset):
             self.chunked_samples.append(self.make_chunk(i))
 
     def __getitem__(self, idx): #last for number of chunks
-        # if self.with_labels:
-        #     return [*self.chunked_samples[idx] , self.data.iloc[idx]["label"],len(self.chunked_samples[idx][0])]
-        # else:
-        #     return [*self.chunked_samples[idx] , 0, len(self.chunked_samples[idx][0])]
-
         if self.with_labels:
-            return [*self.chunked_samples[idx] , self.data.iloc[idx]["label"],1]
+            return [*self.chunked_samples[idx] , self.data.iloc[idx]["label"],len(self.chunked_samples[idx][0])]
         else:
-            return [*self.chunked_samples[idx] , 0, 1]
-        
+            return [*self.chunked_samples[idx] , 0, len(self.chunked_samples[idx][0])]
+
+
             
 
 
