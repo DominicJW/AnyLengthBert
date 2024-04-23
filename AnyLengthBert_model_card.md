@@ -2,7 +2,7 @@
 {}
 ---
 language: en
-license: cc-by-4.0
+license: Apache 2.0
 tags:
 - text-classification
 - evidence retrieval
@@ -15,7 +15,7 @@ repo: https://github.com/DominicJW/AnyLengthBert
 <!-- Provide a quick summary of what the model is/does. -->
 
 This is a classification model that was trained to
-      detect whether detect whether once sentence may provide evidence for the other.
+      detect whether detect whether once sentence may provide evidence for the other. As the name suggests it can accept any lengthed input
 
 
 ## Model Details
@@ -25,7 +25,7 @@ This is a classification model that was trained to
 <!-- Provide a longer summary of what this model is. -->
 
 This model is based upon a BERT model and it was fine-tuned
-      on 25K pairs of texts.  It is designed to not truncate text, but to accept a tensor of chunks of tokenised text, which each is fed into BERT. The outputs of each are pooled
+      on 25K pairs of texts.  It is designed to not truncate text, but to accept a tensor of chunks of tokenised text, which each is fed into BERT. The outputs of each chunk are pooled. 
       
       
 
@@ -128,7 +128,20 @@ The model obtained an F1-score of 76% and an Accuracy of 87%, a Mathews Correlat
 
 <!-- This section is meant to convey both technical and sociotechnical limitations. -->
 
-Training data has not been fully vetted by me.
+Training data has not been fully vetted by me. But some examples do stick out
+
+    claim: We should legalize same sex marriage 
+    evidence: A June 2006 TNS-Sofres poll found that 45% of respondents supported same-sex marriage, with 51% opposed. 
+    label: 1
+    
+    claim: We should increase internet censorship
+    evidence: According to the report, few countries demonstrated any gains in Internet freedom, 
+            and the improvements that were recorded reflected less vigorous application of existing controls rather than new steps taken by governments to actively increase Internet freedom.
+    label:1
+    
+    these examples were not difficult to find. 
+    The name of the task is Evidence Detection. I think the task is really Evidence Retrieval, as it seems these labels are more saying if the evidence pertains to the claim. 
+    
 
 ## Additional Information
 
