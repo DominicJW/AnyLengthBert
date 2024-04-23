@@ -25,8 +25,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class CustomDataset(Dataset):
     """ Takes each sentence pair in the dataset, and splits into chunks. 
-    It attempts to sensibly allocate how much of each chunk is taken with the claim text, and how much by the evidence text.
-    If the evidence text is too long to fit in a single chunk with the claim, the evidence is broken into chunks by a sliding window."""
+        It attempts to sensibly allocate how much of each chunk is taken with the claim text, and how much by the evidence text.
+        If the evidence text is too long to fit in a single chunk with the claim, the evidence is broken into chunks by a sliding window."""
     def __init__(self, df, tokenizer_name='albert-base-v2', max_length=128,with_labels = True):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.data = df
@@ -151,7 +151,7 @@ def my_collate(batch):
     return batch_ids_chunks, batch_attention_mask_chunks, labels_tensor, chunk_length_tensor
 
 class BlankSched:
-"""Used as a placeholder for training function, to simplyfy coding. This way if we want no scheduling, the .step method can be called on this."""
+    """Used as a placeholder for training function, to simplyfy coding. This way if we want no scheduling, the .step method can be called on this."""
     @classmethod
     def step(cls):
         return 1
