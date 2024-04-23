@@ -24,6 +24,9 @@ criterion = nn.BCEWithLogitsLoss()
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class CustomDataset(Dataset):
+    """ Takes each sentence pair in the dataset, and splits into chunks. 
+    It attempts to sensibly allocate how much of each chunk is taken with the claim text, and how much by the evidence text.
+    If the evidence text is too long to fit in a single chunk with the claim, the evidence is broken into chunks by a sliding window."""
     def __init__(self, df, tokenizer_name='albert-base-v2', max_length=128,with_labels = True):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.data = df
@@ -41,11 +44,6 @@ class CustomDataset(Dataset):
         else:
             return [*self.chunked_samples[idx] , 0, len(self.chunked_samples[idx][0])]
         
-
-            
-
-
-
     def preprocess_claim(self,claim):
         if claim.startswith("We should "):
             claim = claim[10:]
@@ -62,11 +60,9 @@ class CustomDataset(Dataset):
         return text
 
     def make_chunk(self, idx):
-
         row = self.data.iloc[idx]
         claim = row["Claim"]
         evidence = row["Evidence"]
-
         try:
             claim = self.preprocess_claim(claim)
         except:
@@ -136,8 +132,6 @@ class CustomDataset(Dataset):
     def __len__(self):
         return len(self.chunked_samples)
 
-
-
 def my_collate(batch):
     ids_chunks, attention_mask_chunks, labels, chunk_length = zip(*batch)
     max_num_chunks = max(len(chunks) for chunks in ids_chunks)
@@ -156,14 +150,88 @@ def my_collate(batch):
     chunk_length_tensor = torch.tensor(chunk_length, dtype=torch.long)
     return batch_ids_chunks, batch_attention_mask_chunks, labels_tensor, chunk_length_tensor
 
-
 class BlankSched:
+"""Used as a placeholder for training function, to simplyfy coding. This way if we want no scheduling, the .step method can be called on this."""
     @classmethod
     def step(cls):
         return 1
 
+def set_seed(seed):
+    """ Set all seeds to make results reproducible """
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(seed)
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
+def get_probs_from_logits(logits):
+    """
+    Converts a tensor of logits into an array of probabilities by applying the sigmoid function
+    """
+    probs = torch.sigmoid(logits.unsqueeze(-1))
+    return probs.detach().cpu().numpy()
+
+##Evaluation and testing
+def evaluate_loss(net, dataloader):
+    """ Computes variius performance metrics to report mid training, tested on validation data"""
+    net.eval()
+    mean_loss = 0
+    count = 0
+    with torch.no_grad():
+        all_predictions = []
+        all_labels = []
+        for it, (seq, attn_masks, labels,lengths) in enumerate(dataloader):
+            seq, attn_masks, labels = seq.to(device), attn_masks.to(device), labels.to(device)
+            logits = net(seq, attn_masks,lengths)
+            mean_loss += criterion(logits.squeeze(-1), labels.float()).item()
+            count += 1
+            probs = get_probs_from_logits(logits)
+
+            all_predictions.extend((probs.flatten()>0.5).astype("uint8"))
+            all_labels.extend(labels.flatten().to("cpu"))
+
+    accuracy = accuracy_score(all_labels,all_predictions)
+    precision = precision_score(all_labels, all_predictions)
+    recall = recall_score(all_labels, all_predictions)
+    f1 = f1_score(all_labels, all_predictions)
+    mcc = matthews_corrcoef(all_labels, all_predictions)
+    accuracy = accuracy_score(all_labels,all_predictions)
+    return (mean_loss / count), accuracy, precision,recall,f1,mcc
+
+
+def test_prediction(net, device, dataloader, with_labels=True, result_file="results/output.txt"):
+    """
+    Predict the probabilities on a dataset with or without labels and print the result in a file
+    """
+    net.eval()
+    w = open(result_file, 'w')
+    probs_all = []
+
+    with torch.no_grad():
+        if with_labels:
+            for seq,attn_masks,label,num_chunks in tqdm(dataloader): ##dataloader should give dummy labels I have no idea why not?
+                seq, attn_masks = seq.to(device), attn_masks.to(device)
+                num_chunks = num_chunks.to(device)
+                logits = net(seq, attn_masks,num_chunks)
+                probs = get_probs_from_logits(logits.squeeze(-1)).squeeze(-1)
+                probs_all += probs.tolist()
+        else:
+            for seq,attn_masks,label,num_chunks in tqdm(dataloader): ##dataloader should give dummy labels I have no idea why not?
+                seq, attn_masks = seq.to(device), attn_masks.to(device)
+                num_chunks = num_chunks.to(device)
+                logits = net(seq, attn_masks,num_chunks)
+                probs = get_probs_from_logits(logits.squeeze(-1)).squeeze(-1)
+                probs_all += probs.tolist()
+
+    w.writelines(str(prob)+'\n' for prob in probs_all)
+    w.close()
+
+
+##The model, and required helpers
 class MaskedGlobalAvgPool1d(nn.Module):
+    """ Adjusts denominator based on the number of padded chunks in an input"""
     def __init__(self):
         super(MaskedGlobalAvgPool1d, self).__init__()
 
@@ -176,6 +244,7 @@ class MaskedGlobalAvgPool1d(nn.Module):
 
 
 class MaskedGlobalMaxPool1d(nn.Module):
+    """ just a wrapper for torch.max, an artifact left from early development"""
     def __init__(self):
         super(MaskedGlobalMaxPool1d, self).__init__()
 
@@ -184,6 +253,7 @@ class MaskedGlobalMaxPool1d(nn.Module):
         return x
 
 class SentencePairClassifier(nn.Module):
+    """The AnyLengthBert SentencePairClassiier """ 
     def __init__(self,bert_model="albert-base-v2", hidden_size =768 ,freeze_bert = False,dropout_p= 0.1):
         super(SentencePairClassifier, self).__init__()
         self.bert = AutoModel.from_pretrained(bert_model)
@@ -255,76 +325,5 @@ class SentencePairClassifier(nn.Module):
         logits = self.cls_layer(self.dropout(pooling_joined))
 
         return logits
-
-
-def set_seed(seed):
-    """ Set all seeds to make results reproducible """
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(seed)
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-
-def get_probs_from_logits(logits):
-    """
-    Converts a tensor of logits into an array of probabilities by applying the sigmoid function
-    """
-    probs = torch.sigmoid(logits.unsqueeze(-1))
-    return probs.detach().cpu().numpy()
-
-def evaluate_loss(net, dataloader):
-    net.eval()
-    mean_loss = 0
-    count = 0
-    with torch.no_grad():
-        all_predictions = []
-        all_labels = []
-        for it, (seq, attn_masks, labels,lengths) in enumerate(dataloader):
-            seq, attn_masks, labels = seq.to(device), attn_masks.to(device), labels.to(device)
-            logits = net(seq, attn_masks,lengths)
-            mean_loss += criterion(logits.squeeze(-1), labels.float()).item()
-            count += 1
-            probs = get_probs_from_logits(logits)
-
-            all_predictions.extend((probs.flatten()>0.5).astype("uint8"))
-            all_labels.extend(labels.flatten().to("cpu"))
-
-    accuracy = accuracy_score(all_labels,all_predictions)
-    precision = precision_score(all_labels, all_predictions)
-    recall = recall_score(all_labels, all_predictions)
-    f1 = f1_score(all_labels, all_predictions)
-    mcc = matthews_corrcoef(all_labels, all_predictions)
-    accuracy = accuracy_score(all_labels,all_predictions)
-    return (mean_loss / count), accuracy, precision,recall,f1,mcc
-
-
-def test_prediction(net, device, dataloader, with_labels=True, result_file="results/output.txt"):
-    """
-    Predict the probabilities on a dataset with or without labels and print the result in a file
-    """
-    net.eval()
-    w = open(result_file, 'w')
-    probs_all = []
-
-    with torch.no_grad():
-        if with_labels:
-            for seq,attn_masks,label,num_chunks in tqdm(dataloader): ##dataloader should give dummy labels I have no idea why not?
-                seq, attn_masks = seq.to(device), attn_masks.to(device)
-                num_chunks = num_chunks.to(device)
-                logits = net(seq, attn_masks,num_chunks)
-                probs = get_probs_from_logits(logits.squeeze(-1)).squeeze(-1)
-                probs_all += probs.tolist()
-        else:
-            for seq,attn_masks,label,num_chunks in tqdm(dataloader): ##dataloader should give dummy labels I have no idea why not?
-                seq, attn_masks = seq.to(device), attn_masks.to(device)
-                num_chunks = num_chunks.to(device)
-                logits = net(seq, attn_masks,num_chunks)
-                probs = get_probs_from_logits(logits.squeeze(-1)).squeeze(-1)
-                probs_all += probs.tolist()
-
-    w.writelines(str(prob)+'\n' for prob in probs_all)
-    w.close()
 
 
