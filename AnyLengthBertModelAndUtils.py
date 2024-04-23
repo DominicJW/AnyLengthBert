@@ -24,19 +24,24 @@ criterion = nn.BCEWithLogitsLoss()
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class CustomDataset(Dataset):
-    def __init__(self, df, tokenizer_name='albert-base-v2', max_length=128):
+    def __init__(self, df, tokenizer_name='albert-base-v2', max_length=128,with_labels = True):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.data = df
         self.max_length = max_length
         self.chunked_samples = []
         self.make_chunks()
-
+        self.with_labels = with_labels
     def make_chunks(self):
         for i in range(len(self.data)):
             self.chunked_samples.append(self.make_chunk(i))
 
     def __getitem__(self, idx): #last for number of chunks
-        return [*self.chunked_samples[idx] , self.data.iloc[idx]["label"],len(self.chunked_samples[idx][0])]
+        if self.with_labels:
+            return [*self.chunked_samples[idx] , self.data.iloc[idx]["label"],len(self.chunked_samples[idx][0])]
+        else:
+            return [*self.chunked_samples[idx] , 0, len(self.chunked_samples[idx][0])]
+            
+
 
 
     def preprocess_claim(self,claim):
@@ -45,7 +50,10 @@ class CustomDataset(Dataset):
         return self.preprocess_text(claim)
 
     def preprocess_evidence(self,evidence):
-        evidence = evidence.replace("[REF]"," ")
+        try:
+            evidence = evidence.replace("[REF]"," ")
+        except:
+            print(evidence)
         return self.preprocess_text(evidence)
 
     def preprocess_text(self,text):
@@ -60,8 +68,14 @@ class CustomDataset(Dataset):
         claim = row["Claim"]
         evidence = row["Evidence"]
 
-        claim = self.preprocess_claim(claim)
-        evidence = self.preprocess_evidence(evidence)
+        try:
+            claim = self.preprocess_claim(claim)
+        except:
+            claim = " "
+        try:
+            evidence = self.preprocess_evidence(evidence)
+        except:
+            evidence = " "
 
         claim_tokens = self.tokenizer.encode_plus(claim, add_special_tokens=False, return_tensors='pt', truncation=False)
         evidence_tokens = self.tokenizer.encode_plus(evidence, add_special_tokens=False, return_tensors='pt', truncation=False)
@@ -297,18 +311,21 @@ def test_prediction(net, device, dataloader, with_labels=True, result_file="resu
 
     with torch.no_grad():
         if with_labels:
-            for seq, attn_masks, token_type_ids, _ in tqdm(dataloader):
-                seq, attn_masks, token_type_ids = seq.to(device), attn_masks.to(device), token_type_ids.to(device)
-                logits = net(seq, attn_masks, token_type_ids)
+            for seq,attn_masks,label,num_chunks in tqdm(dataloader): ##dataloader should give dummy labels I have no idea why not?
+                seq, attn_masks = seq.to(device), attn_masks.to(device)
+                num_chunks = num_chunks.to(device)
+                logits = net(seq, attn_masks,num_chunks)
                 probs = get_probs_from_logits(logits.squeeze(-1)).squeeze(-1)
                 probs_all += probs.tolist()
         else:
-            for seq, attn_masks, token_type_ids in tqdm(dataloader):
-                seq, attn_masks, token_type_ids = seq.to(device), attn_masks.to(device), token_type_ids.to(device)
-                logits = net(seq, attn_masks, token_type_ids)
+            for seq,attn_masks,label,num_chunks in tqdm(dataloader): ##dataloader should give dummy labels I have no idea why not?
+                seq, attn_masks = seq.to(device), attn_masks.to(device)
+                num_chunks = num_chunks.to(device)
+                logits = net(seq, attn_masks,num_chunks)
                 probs = get_probs_from_logits(logits.squeeze(-1)).squeeze(-1)
                 probs_all += probs.tolist()
 
     w.writelines(str(prob)+'\n' for prob in probs_all)
     w.close()
+
 
